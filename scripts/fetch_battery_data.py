@@ -49,14 +49,15 @@ YFINANCE_FALLBACKS = {
     "nickel":   ["NIKL", "LNICKEL.L"],
 }
 
-# World Bank Pink Sheet column names (these match the sheet's actual headers)
+# World Bank Pink Sheet column names — matched to actual sheet headers
+# Full names visible at: https://thedocs.worldbank.org Pink Sheet Monthly Prices tab
 PINK_SHEET_COLS = {
-    "cobalt":    "Cobalt",
-    "nickel":    "Nickel",
-    "copper":    "Copper",
-    "manganese": "Manganese ore",
-    "aluminum":  "Aluminum",
-    "phosphate": "Phosphate rock",
+    "cobalt":    "Cobalt",           # "Cobalt, cathode"
+    "nickel":    "Nickel",           # "Nickel"  
+    "copper":    "Copper",           # "Copper"
+    "manganese": "Manganese",        # "Manganese ore"
+    "aluminum":  "Aluminum",         # "Aluminum"
+    "phosphate": "Phosphate",        # "Phosphate rock"
 }
 
 # ── IEA/BNEF seeded $/kWh data (published, does not change) ──────────────────
@@ -197,15 +198,39 @@ def fetch_pink_sheet() -> dict:
         df = pd.read_excel(xl, sheet_name=sheet_name, header=header_row)
         print(f"    Columns (first 15): {list(df.columns[:15])}")
 
-        # First column is dates — find it (may be named "Date", "Month", or blank)
+        # First column is dates (shows as "Unnamed: 0" in Pink Sheet)
         first_col = df.columns[0]
         df = df.rename(columns={first_col: "date"})
 
-        # Parse dates — Pink Sheet uses format like "Jan-60" or actual date values
-        df["date"] = pd.to_datetime(df["date"], errors="coerce")
+        # Pink Sheet dates are Excel serial numbers or "Jan-60" strings
+        # Try multiple parse strategies
+        date_col = df["date"].copy()
+        
+        # Strategy 1: direct parse
+        parsed = pd.to_datetime(date_col, errors="coerce")
+        
+        # Strategy 2: if most failed, try as Excel serial numbers
+        valid_count = parsed.notna().sum()
+        if valid_count < 10:
+            try:
+                # Excel serial date: days since 1899-12-30
+                numeric_dates = pd.to_numeric(date_col, errors="coerce")
+                excel_parsed = pd.to_datetime(numeric_dates, unit="D", origin="1899-12-30", errors="coerce")
+                if excel_parsed.notna().sum() > valid_count:
+                    parsed = excel_parsed
+                    print(f"    Using Excel serial date parsing")
+            except:
+                pass
+
+        df["date"] = parsed
         df = df.dropna(subset=["date"])
         df = df.set_index("date").sort_index()
+        
+        if len(df) == 0:
+            raise ValueError("No valid dates found in Pink Sheet after all parse attempts")
+        
         print(f"    Date range: {df.index[0].date()} → {df.index[-1].date()}, {len(df)} rows")
+        print(f"    All columns: {[c for c in df.columns if any(k in str(c).lower() for k in ['cobalt','nickel','copper','mangan','alumin','phosph'])]}")
 
         results = {}
         for material, col_name in PINK_SHEET_COLS.items():

@@ -41,23 +41,24 @@ YFINANCE_TICKERS = {
     "nickel":   "NKL=F",   # Nickel futures (CME)
     "copper":   "HG=F",    # Copper futures (COMEX, $/lb — we convert to $/tonne)
     "aluminum": "ALI=F",   # Aluminum futures
+    "cobalt":   "COBA.L",  # Cobalt ETF (London, WisdomTree Physical Cobalt)
     "lit_etf":  "LIT",     # Global X Lithium & Battery Tech ETF (lithium proxy)
 }
 
 # Fallback tickers if primary fails
 YFINANCE_FALLBACKS = {
     "nickel":   ["NIKL", "LNICKEL.L"],
+    "cobalt":   ["LCOB.L", "BATT"],  # BATT = Amplify Lithium & Battery Tech ETF
 }
 
 # World Bank Pink Sheet column names — matched to actual sheet headers
-# Full names visible at: https://thedocs.worldbank.org Pink Sheet Monthly Prices tab
+# Cobalt was removed from Pink Sheet ~2022, sourced via yfinance instead
 PINK_SHEET_COLS = {
-    "cobalt":    "Cobalt",           # "Cobalt, cathode"
-    "nickel":    "Nickel",           # "Nickel"  
-    "copper":    "Copper",           # "Copper"
-    "manganese": "Manganese",        # "Manganese ore"
-    "aluminum":  "Aluminum",         # "Aluminum"
-    "phosphate": "Phosphate",        # "Phosphate rock"
+    "nickel":    "Nickel",
+    "copper":    "Copper",
+    "manganese": "ore",              # matches "Manganese ore, 46-48%" etc.
+    "aluminum":  "Aluminum",
+    "phosphate": "Phosphate",
 }
 
 # ── IEA/BNEF seeded $/kWh data (published, does not change) ──────────────────
@@ -233,7 +234,10 @@ def fetch_pink_sheet() -> dict:
             raise ValueError("No valid dates found in Pink Sheet after all parse attempts")
         
         print(f"    Date range: {df.index[0].date()} → {df.index[-1].date()}, {len(df)} rows")
-        print(f"    All columns: {[c for c in df.columns if any(k in str(c).lower() for k in ['cobalt','nickel','copper','mangan','alumin','phosph'])]}")
+        # Print all columns so we can see exact manganese name
+        mangan_cols = [c for c in df.columns if 'mangan' in str(c).lower()]
+        print(f"    Manganese columns found: {mangan_cols}")
+        print(f"    Battery-relevant columns: {[c for c in df.columns if any(k in str(c).lower() for k in ['cobalt','nickel','copper','mangan','alumin','phosph'])]}")
 
         results = {}
         for material, col_name in PINK_SHEET_COLS.items():

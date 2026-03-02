@@ -1,0 +1,56 @@
+{
+  "updated": "2026-03-02T03:17:01Z",
+  "unit": "USD per kWh (pack level)",
+  "source": "IEA Global EV Outlook / BloombergNEF Battery Price Survey",
+  "note": "Annual averages. 2022 spike reflects lithium carbonate price surge. Recent years are preliminary estimates.",
+  "data": [
+    {
+      "year": 2013,
+      "price_usd_kwh": 684
+    },
+    {
+      "year": 2014,
+      "price_usd_kwh": 588
+    },
+    {
+      "year": 2015,
+      "price_usd_kwh": 373
+    },
+    {
+      "year": 2016,
+      "price_usd_kwh": 273
+    },
+    {
+      "year": 2017,
+      "price_usd_kwh": 214
+    },
+    {
+      "year": 2018,
+      "price_usd_kwh": 176
+    },
+    {
+      "year": 2019,
+      "price_usd_kwh": 156
+    },
+    {
+      "year": 2020,
+      "price_usd_kwh": 137
+    },
+    {
+      "year": 2021,
+      "price_usd_kwh": 132
+    },
+    {
+      "year": 2022,
+      "price_usd_kwh": 151
+    },
+    {
+      "year": 2023,
+      "price_usd_kwh": 139
+    },
+    {
+      "year": 2024,
+      "price_usd_kwh": 115
+    }
+  ]
+}

@@ -208,25 +208,22 @@ def fetch_pink_sheet() -> dict:
         # Debug: print first 10 raw date values and their types
         print(f"    Raw date samples: {[(str(v), type(v).__name__) for v in df['date'].head(10).tolist()]}")
 
-        # Pink Sheet dates are Excel serial numbers or "Jan-60" strings
-        # Try multiple parse strategies
+        # Pink Sheet dates use World Bank format: "1960M01", "1960M02" etc.
         date_col = df["date"].copy()
-        
-        # Strategy 1: direct parse
-        parsed = pd.to_datetime(date_col, errors="coerce")
-        
-        # Strategy 2: if most failed, try as Excel serial numbers
-        valid_count = parsed.notna().sum()
-        if valid_count < 10:
-            try:
-                # Excel serial date: days since 1899-12-30
-                numeric_dates = pd.to_numeric(date_col, errors="coerce")
-                excel_parsed = pd.to_datetime(numeric_dates, unit="D", origin="1899-12-30", errors="coerce")
-                if excel_parsed.notna().sum() > valid_count:
-                    parsed = excel_parsed
-                    print(f"    Using Excel serial date parsing")
-            except:
-                pass
+
+        # Convert "1960M01" -> "1960-01" then parse
+        def parse_wb_date(val):
+            s = str(val).strip()
+            if "M" in s:
+                try:
+                    year, month = s.split("M")
+                    return pd.Timestamp(int(year), int(month), 1)
+                except:
+                    return pd.NaT
+            return pd.NaT
+
+        parsed = date_col.apply(parse_wb_date)
+        print(f"    Parsed {parsed.notna().sum()} dates using World Bank format")
 
         df["date"] = parsed
         df = df.dropna(subset=["date"])

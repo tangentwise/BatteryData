@@ -194,6 +194,9 @@ def fetch_pink_sheet() -> dict:
             header_row = 4  # World Bank default
             print(f"    Falling back to header row {header_row}")
 
+        # Print raw rows around header to understand date format
+        print(f"    Raw rows 3-8 col 0: {[str(raw.iloc[i, 0]) for i in range(3, min(9, len(raw)))]}")
+
         # Read with correct header
         df = pd.read_excel(xl, sheet_name=sheet_name, header=header_row)
         print(f"    Columns (first 15): {list(df.columns[:15])}")
@@ -201,6 +204,9 @@ def fetch_pink_sheet() -> dict:
         # First column is dates (shows as "Unnamed: 0" in Pink Sheet)
         first_col = df.columns[0]
         df = df.rename(columns={first_col: "date"})
+
+        # Debug: print first 10 raw date values and their types
+        print(f"    Raw date samples: {[(str(v), type(v).__name__) for v in df['date'].head(10).tolist()]}")
 
         # Pink Sheet dates are Excel serial numbers or "Jan-60" strings
         # Try multiple parse strategies

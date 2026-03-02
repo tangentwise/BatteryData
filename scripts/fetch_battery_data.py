@@ -38,10 +38,15 @@ PINK_SHEET_URL = "https://thedocs.worldbank.org/en/doc/5d903e848db1d1b83e0ec8f74
 
 # yfinance tickers
 YFINANCE_TICKERS = {
-    "nickel":   "NI=F",    # Nickel futures (LME)
+    "nickel":   "NKL=F",   # Nickel futures (CME)
     "copper":   "HG=F",    # Copper futures (COMEX, $/lb — we convert to $/tonne)
     "aluminum": "ALI=F",   # Aluminum futures
     "lit_etf":  "LIT",     # Global X Lithium & Battery Tech ETF (lithium proxy)
+}
+
+# Fallback tickers if primary fails
+YFINANCE_FALLBACKS = {
+    "nickel":   ["NIKL", "LNICKEL.L"],
 }
 
 # World Bank Pink Sheet column names (these match the sheet's actual headers)
@@ -80,17 +85,26 @@ def make_output_dir():
 def to_monthly_index(series: pd.Series, base_date: str) -> pd.Series:
     """
     Resample a price series to month-end, then index it so the value
-    at base_date equals 100. Returns NaN where base_date has no data.
+    at base_date equals 100. Returns empty series if data is insufficient.
     """
     series = series.dropna()
+    if series.empty:
+        return pd.Series(dtype=float)
+
     series.index = pd.to_datetime(series.index)
-    monthly = series.resample("ME").last()
+    monthly = series.resample("ME").last().dropna()
+
+    if monthly.empty:
+        return pd.Series(dtype=float)
 
     base = pd.Timestamp(base_date)
     # Find closest month-end to base date
-    if base not in monthly.index:
-        # Use nearest available
-        nearest = monthly.index[monthly.index.get_indexer([base], method="nearest")[0]]
+    indexer = monthly.index.get_indexer([base], method="nearest")
+    if indexer[0] == -1 or len(monthly.index) == 0:
+        # No data near base date — index to first available point
+        base_val = monthly.iloc[0]
+    elif base not in monthly.index:
+        nearest = monthly.index[indexer[0]]
         base_val = monthly.loc[nearest]
     else:
         base_val = monthly.loc[base]
@@ -181,17 +195,32 @@ def fetch_pink_sheet() -> dict:
         df = df.dropna(subset=["date"])
         df = df.set_index("date").sort_index()
 
+        # Print actual columns for debugging
+        print(f"    Pink Sheet columns: {list(df.columns[:20])}")
+
         results = {}
         for material, col_name in PINK_SHEET_COLS.items():
-            # Find column by partial match (headers vary slightly)
-            matching = [c for c in df.columns if col_name.lower() in str(c).lower()]
+            # Try multiple matching strategies
+            col_lower = col_name.lower()
+            matching = []
+            # 1. Exact partial match
+            matching = [c for c in df.columns if col_lower in str(c).lower()]
+            # 2. First word match (e.g. "Cobalt" matches "Cobalt, cathode")
+            if not matching:
+                first_word = col_lower.split()[0]
+                matching = [c for c in df.columns if str(c).lower().startswith(first_word)]
+            # 3. Any word match
+            if not matching:
+                words = col_lower.split()
+                matching = [c for c in df.columns if any(w in str(c).lower() for w in words)]
+
             if matching:
                 s = pd.to_numeric(df[matching[0]], errors="coerce")
                 s.name = material
                 results[material] = s
-                print(f"    ✓ {material}: {s.dropna().__len__()} rows")
+                print(f"    ✓ {material}: matched '{matching[0]}', {s.dropna().__len__()} rows")
             else:
-                print(f"    ✗ {material}: column '{col_name}' not found")
+                print(f"    ✗ {material}: no match for '{col_name}'")
                 results[material] = pd.Series(name=material, dtype=float)
 
         return results
@@ -213,30 +242,38 @@ def fetch_yfinance() -> dict:
 
     for material, ticker in YFINANCE_TICKERS.items():
         print(f"  Fetching {material} ({ticker}) from yfinance...")
-        try:
-            t = yf.Ticker(ticker)
-            hist = t.history(start=start_date, interval="1mo")
-            if hist.empty:
-                # Try daily and resample
-                hist = t.history(start=start_date, interval="1d")
+        tickers_to_try = [ticker] + YFINANCE_FALLBACKS.get(material, [])
+        success = False
+
+        for t_symbol in tickers_to_try:
+            try:
+                t = yf.Ticker(t_symbol)
+                hist = t.history(start=start_date, interval="1mo")
                 if hist.empty:
-                    raise ValueError("No data returned")
-                hist = hist["Close"].resample("ME").last()
-            else:
-                hist = hist["Close"]
+                    hist = t.history(start=start_date, interval="1d")
+                    if hist.empty:
+                        raise ValueError("No data returned")
+                    hist = hist["Close"].resample("ME").last()
+                else:
+                    hist = hist["Close"]
 
-            hist.index = hist.index.tz_localize(None) if hist.index.tz else hist.index
-            hist.name = material
+                hist.index = hist.index.tz_localize(None) if hist.index.tz else hist.index
+                hist.name = material
 
-            # Copper is in $/lb on COMEX — convert to $/tonne
-            if material == "copper":
-                hist = hist * 2204.62
+                if material == "copper":
+                    hist = hist * 2204.62
 
-            print(f"    ✓ {len(hist)} months, latest: {hist.index[-1].date()} = {hist.iloc[-1]:.2f}")
-            results[material] = hist
+                print(f"    ✓ {t_symbol}: {len(hist)} months, latest: {hist.index[-1].date()} = {hist.iloc[-1]:.2f}")
+                results[material] = hist
+                success = True
+                break
 
-        except Exception as e:
-            print(f"    ✗ {material} failed: {e}")
+            except Exception as e:
+                print(f"    ✗ {t_symbol} failed: {e}")
+                continue
+
+        if not success:
+            print(f"    ✗ All tickers failed for {material}")
             results[material] = pd.Series(name=material, dtype=float)
 
     return results

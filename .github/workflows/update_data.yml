@@ -32,3 +32,4 @@ jobs:
           git add data/materials.json data/kwh_index.json
           git diff --cached --quiet || git commit -m "Auto-update battery data $(date -u '+%Y-%m-%d')"
           git push
+

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-03-02T03:45:44Z",
+  "updated": "2026-03-02T06:47:24Z",
   "index_base": "2022-01-01",
   "note": "All values indexed to 100 at base date. Enables cross-material comparison regardless of unit.",
   "materials": {
@@ -6377,7 +6377,7 @@
         },
         {
           "date": "2026-03-31",
-          "value": 139.74
+          "value": 140.3
         }
       ]
     },
@@ -12685,7 +12685,7 @@
         },
         {
           "date": "2026-03-31",
-          "value": 115.5
+          "value": 117.04
         }
       ]
     },

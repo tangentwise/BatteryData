@@ -153,72 +153,79 @@ def fetch_pink_sheet() -> dict:
     """
     Download the World Bank Pink Sheet Excel file and extract
     monthly commodity price series. Returns dict of {material: pd.Series}.
+    
+    The Pink Sheet structure:
+    - Row 0: Title row ("World Bank Commodity Price Data...")
+    - Rows 1-3: Metadata/units rows  
+    - Row 4: Column headers (commodity names)
+    - Row 5+: Data rows starting with dates
     """
     print("  Fetching World Bank Pink Sheet...")
     try:
         resp = requests.get(PINK_SHEET_URL, timeout=30)
         resp.raise_for_status()
 
-        # The Pink Sheet has multiple sheets — we want "Monthly Prices"
         xl = pd.ExcelFile(io.BytesIO(resp.content))
-        sheet_name = [s for s in xl.sheet_names if "monthly" in s.lower()]
-        if not sheet_name:
-            sheet_name = xl.sheet_names[0]
-        else:
-            sheet_name = sheet_name[0]
+        print(f"    Sheet names: {xl.sheet_names}")
 
-        # Read with no header first to find where data starts
+        # Target the Monthly Prices sheet
+        sheet_name = next((s for s in xl.sheet_names if "monthly" in s.lower()), xl.sheet_names[0])
+        print(f"    Using sheet: {sheet_name}")
+
+        # Read raw with no header to inspect structure
         raw = pd.read_excel(xl, sheet_name=sheet_name, header=None)
+        print(f"    Raw shape: {raw.shape}")
 
-        # Find the row where dates start (look for a cell containing a year like 1960)
-        date_row = None
-        for i, row in raw.iterrows():
-            for val in row:
-                try:
-                    if 1960 <= int(float(str(val))) <= 1970:
-                        date_row = i
-                        break
-                except:
-                    pass
-            if date_row is not None:
+        # Find the header row — it's the row that contains commodity names like "Cobalt"
+        # We look for a row where multiple cells contain alphabetic text (commodity names)
+        # and the first cell looks like a date label ("Date" or "Month" or similar)
+        header_row = None
+        for i in range(min(20, len(raw))):
+            row_vals = [str(v).strip() for v in raw.iloc[i] if str(v).strip() not in ["", "nan"]]
+            # Header row has many string values and first cell is date-like or empty
+            alpha_count = sum(1 for v in row_vals if any(c.isalpha() for c in v))
+            if alpha_count >= 5:
+                header_row = i
+                print(f"    Found header at row {i}: {row_vals[:8]}")
                 break
 
-        if date_row is None:
-            # Fallback: assume row 6
-            date_row = 6
+        if header_row is None:
+            header_row = 4  # World Bank default
+            print(f"    Falling back to header row {header_row}")
 
-        df = pd.read_excel(xl, sheet_name=sheet_name, header=date_row)
+        # Read with correct header
+        df = pd.read_excel(xl, sheet_name=sheet_name, header=header_row)
+        print(f"    Columns (first 15): {list(df.columns[:15])}")
 
-        # First column is dates
-        df = df.rename(columns={df.columns[0]: "date"})
+        # First column is dates — find it (may be named "Date", "Month", or blank)
+        first_col = df.columns[0]
+        df = df.rename(columns={first_col: "date"})
+
+        # Parse dates — Pink Sheet uses format like "Jan-60" or actual date values
         df["date"] = pd.to_datetime(df["date"], errors="coerce")
         df = df.dropna(subset=["date"])
         df = df.set_index("date").sort_index()
-
-        # Print actual columns for debugging
-        print(f"    Pink Sheet columns: {list(df.columns[:20])}")
+        print(f"    Date range: {df.index[0].date()} → {df.index[-1].date()}, {len(df)} rows")
 
         results = {}
         for material, col_name in PINK_SHEET_COLS.items():
-            # Try multiple matching strategies
             col_lower = col_name.lower()
-            matching = []
-            # 1. Exact partial match
+            # Strategy 1: partial string match
             matching = [c for c in df.columns if col_lower in str(c).lower()]
-            # 2. First word match (e.g. "Cobalt" matches "Cobalt, cathode")
+            # Strategy 2: first word
             if not matching:
                 first_word = col_lower.split()[0]
                 matching = [c for c in df.columns if str(c).lower().startswith(first_word)]
-            # 3. Any word match
+            # Strategy 3: any word
             if not matching:
-                words = col_lower.split()
+                words = [w for w in col_lower.split() if len(w) > 3]
                 matching = [c for c in df.columns if any(w in str(c).lower() for w in words)]
 
             if matching:
-                s = pd.to_numeric(df[matching[0]], errors="coerce")
+                s = pd.to_numeric(df[matching[0]], errors="coerce").dropna()
                 s.name = material
                 results[material] = s
-                print(f"    ✓ {material}: matched '{matching[0]}', {s.dropna().__len__()} rows")
+                print(f"    ✓ {material}: matched '{matching[0]}', {len(s)} rows")
             else:
                 print(f"    ✗ {material}: no match for '{col_name}'")
                 results[material] = pd.Series(name=material, dtype=float)
@@ -227,6 +234,8 @@ def fetch_pink_sheet() -> dict:
 
     except Exception as e:
         print(f"    ✗ Pink Sheet failed: {e}")
+        import traceback
+        traceback.print_exc()
         return {m: pd.Series(name=m, dtype=float) for m in PINK_SHEET_COLS}
 
 

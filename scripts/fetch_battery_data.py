@@ -350,12 +350,25 @@ def build_materials_json(all_series: dict) -> dict:
             continue
         indexed = to_monthly_index(series, INDEX_BASE_DATE)
         meta = METADATA.get(material, {"label": material, "unit": "index", "source": "various"})
+
+        # Store both raw and indexed so dashboard can choose
+        raw_records = []
+        series_clean = series.dropna()
+        series_clean.index = pd.to_datetime(series_clean.index)
+        monthly_raw = series_clean.resample("ME").last().dropna()
+        for dt, val in monthly_raw.items():
+            raw_records.append({
+                "date": dt.strftime("%Y-%m-%d"),
+                "value": round(float(val), 2)
+            })
+
         materials_out[material] = {
             "label":       meta["label"],
             "unit":        meta["unit"],
             "source":      meta["source"],
             "index_base":  INDEX_BASE_DATE,
-            "data":        series_to_records(indexed, material)
+            "data":        series_to_records(indexed, material),   # indexed (for composite)
+            "raw":         raw_records                             # actual prices (for individual view)
         }
 
     return {

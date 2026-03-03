@@ -30,8 +30,13 @@ from dateutil.relativedelta import relativedelta
 OUTPUT_DIR = "data"
 INDEX_BASE_DATE = "2022-01-01"   # Everything indexed to 100 at this date
 
-GOOGLE_SHEET_LITHIUM  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ45-wl_wNqjBFGKt2c9n9Vcx9n_rkbdaXnXS58Z62F-qzqExZdxMCJcUucxoW59rwayHfNHMBYjtxX/pub?gid=0&single=true&output=csv"
-GOOGLE_SHEET_GRAPHITE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ45-wl_wNqjBFGKt2c9n9Vcx9n_rkbdaXnXS58Z62F-qzqExZdxMCJcUucxoW59rwayHfNHMBYjtxX/pub?gid=2061809493&single=true&output=csv"
+GOOGLE_SHEET_LITHIUM   = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ45-wl_wNqjBFGKt2c9n9Vcx9n_rkbdaXnXS58Z62F-qzqExZdxMCJcUucxoW59rwayHfNHMBYjtxX/pub?gid=0&single=true&output=csv"
+GOOGLE_SHEET_GRAPHITE  = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ45-wl_wNqjBFGKt2c9n9Vcx9n_rkbdaXnXS58Z62F-qzqExZdxMCJcUucxoW59rwayHfNHMBYjtxX/pub?gid=2061809493&single=true&output=csv"
+# Cobalt and Manganese — manual monthly entries in Google Sheet
+# Cobalt source: LME monthly averages
+# Manganese source: Manganese Ore 44% $/t reference prices
+GOOGLE_SHEET_COBALT    = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ45-wl_wNqjBFGKt2c9n9Vcx9n_rkbdaXnXS58Z62F-qzqExZdxMCJcUucxoW59rwayHfNHMBYjtxX/pub?gid=1418936242&single=true&output=csv"
+GOOGLE_SHEET_MANGANESE = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQ45-wl_wNqjBFGKt2c9n9Vcx9n_rkbdaXnXS58Z62F-qzqExZdxMCJcUucxoW59rwayHfNHMBYjtxX/pub?gid=1993954046&single=true&output=csv"
 
 # World Bank Pink Sheet — stable direct download URL
 PINK_SHEET_URL = "https://thedocs.worldbank.org/en/doc/5d903e848db1d1b83e0ec8f744e55570-0350012021/related/CMO-Historical-Data-Monthly.xlsx"
@@ -41,22 +46,19 @@ YFINANCE_TICKERS = {
     "nickel":   "NKL=F",   # Nickel futures (CME)
     "copper":   "HG=F",    # Copper futures (COMEX, $/lb — we convert to $/tonne)
     "aluminum": "ALI=F",   # Aluminum futures
-    "cobalt":   "COBA.L",  # Cobalt ETF (London, WisdomTree Physical Cobalt)
     "lit_etf":  "LIT",     # Global X Lithium & Battery Tech ETF (lithium proxy)
 }
 
 # Fallback tickers if primary fails
 YFINANCE_FALLBACKS = {
     "nickel":   ["NIKL", "LNICKEL.L"],
-    "cobalt":   ["LCOB.L", "BATT"],  # BATT = Amplify Lithium & Battery Tech ETF
 }
 
 # World Bank Pink Sheet column names — matched to actual sheet headers
-# Cobalt was removed from Pink Sheet ~2022, sourced via yfinance instead
+# Cobalt and Manganese not available in Pink Sheet — sourced via yfinance/manual
 PINK_SHEET_COLS = {
     "nickel":    "Nickel",
     "copper":    "Copper",
-    "manganese": "ore",              # matches "Manganese ore, 46-48%" etc.
     "aluminum":  "Aluminum",
     "phosphate": "Phosphate",
 }
@@ -336,7 +338,6 @@ def build_materials_json(all_series: dict) -> dict:
         "cobalt":    {"label": "Cobalt",             "unit": "$/tonne",  "source": "World Bank Pink Sheet"},
         "nickel":    {"label": "Nickel",             "unit": "$/tonne",  "source": "World Bank / yfinance"},
         "copper":    {"label": "Copper",             "unit": "$/tonne",  "source": "World Bank / yfinance"},
-        "manganese": {"label": "Manganese Ore",      "unit": "$/dmtu",   "source": "World Bank Pink Sheet"},
         "aluminum":  {"label": "Aluminum",           "unit": "$/tonne",  "source": "World Bank / yfinance"},
         "phosphate": {"label": "Phosphate Rock",     "unit": "$/tonne",  "source": "World Bank Pink Sheet"},
         "lit_etf":   {"label": "LIT ETF (Li proxy)", "unit": "USD/share","source": "Yahoo Finance"},
@@ -371,10 +372,12 @@ def main():
 
     all_series = {}
 
-    # 1. Google Sheets — Lithium & Graphite
+    # 1. Google Sheets — Lithium, Graphite, Cobalt, Manganese
     print("[ 1/3 ] Google Sheets")
-    all_series["lithium"]  = fetch_google_sheet(GOOGLE_SHEET_LITHIUM,  "lithium")
-    all_series["graphite"] = fetch_google_sheet(GOOGLE_SHEET_GRAPHITE, "graphite")
+    all_series["lithium"]   = fetch_google_sheet(GOOGLE_SHEET_LITHIUM,   "lithium")
+    all_series["graphite"]  = fetch_google_sheet(GOOGLE_SHEET_GRAPHITE,  "graphite")
+    all_series["cobalt"]    = fetch_google_sheet(GOOGLE_SHEET_COBALT,    "cobalt")
+    all_series["manganese"] = fetch_google_sheet(GOOGLE_SHEET_MANGANESE, "manganese")
 
     # 2. World Bank Pink Sheet
     print("\n[ 2/3 ] World Bank Pink Sheet")

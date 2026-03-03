@@ -43,7 +43,7 @@ PINK_SHEET_URL = "https://thedocs.worldbank.org/en/doc/5d903e848db1d1b83e0ec8f74
 
 # yfinance tickers
 YFINANCE_TICKERS = {
-    "nickel":   "NKL=F",   # Nickel futures (CME)
+    "nickel":   "NIKL",    # VanEck Nickel ETF (NKL=F delisted from CME)
     "copper":   "HG=F",    # Copper futures (COMEX, $/lb — we convert to $/tonne)
     "aluminum": "ALI=F",   # Aluminum futures
     "lit_etf":  "LIT",     # Global X Lithium & Battery Tech ETF (lithium proxy)
@@ -51,7 +51,7 @@ YFINANCE_TICKERS = {
 
 # Fallback tickers if primary fails
 YFINANCE_FALLBACKS = {
-    "nickel":   ["NIKL", "LNICKEL.L"],
+    "nickel":   ["LNICKEL.L"],
 }
 
 # World Bank Pink Sheet column names — matched to actual sheet headers
@@ -234,7 +234,9 @@ def fetch_pink_sheet() -> dict:
         
         if len(df) == 0:
             raise ValueError("No valid dates found in Pink Sheet after all parse attempts")
-        
+
+        # Trim to 2020 onwards — no need for 60 years of history
+        df = df[df.index >= "2020-01-01"]
         print(f"    Date range: {df.index[0].date()} → {df.index[-1].date()}, {len(df)} rows")
         # Print all columns so we can see exact manganese name
         mangan_cols = [c for c in df.columns if 'mangan' in str(c).lower()]
@@ -281,7 +283,7 @@ def fetch_yfinance() -> dict:
     Returns dict of {material: pd.Series} with monthly close prices.
     """
     results = {}
-    start_date = "2019-01-01"
+    start_date = "2020-01-01"
 
     for material, ticker in YFINANCE_TICKERS.items():
         print(f"  Fetching {material} ({ticker}) from yfinance...")
